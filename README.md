@@ -1,54 +1,52 @@
-# Система мониторинга сервера
+# server-monitor
 
-Веб-приложение для мониторинга ресурсов сервера в реальном времени.
+![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Flask](https://img.shields.io/badge/flask-3.0-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-informational.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-## Стек
+Real-time server monitoring via web dashboard. Tracks CPU, RAM, disk, network, processes and security events.
 
-- **Backend**: Python 3, Flask, psutil
-- **Frontend**: HTML/CSS/JS, Chart.js 4.4, Geist font
+![dashboard preview](https://raw.githubusercontent.com/Laincetta/server-monitor/main/docs/preview.png)
 
-## Возможности
+## Features
 
-- Мониторинг CPU, RAM, диска, сети в реальном времени
-- Графики нагрузки за последние 60 секунд
-- Система оповещений (warning / critical пороги)
-- Вкладка безопасности: новые подключения, подозрительные процессы, сессии
-- Таблица процессов с сортировкой по CPU/RAM
+- Live metrics — CPU, RAM, disk, network updated every second
+- 60-second history charts
+- Security tab — new connections, logins, suspicious processes
+- Process table sorted by CPU usage
+- Works on Linux and Windows
 
-## Запуск
+## Quick start
 
-### Linux
-
-```bash
-pip install -r requirements.txt
-python monitor.py
+```sh
+git clone https://github.com/Laincetta/server-monitor.git
+cd server-monitor
+pip3 install -r requirements.txt
+python3 monitor.py
 ```
 
-Открыть браузер: `http://localhost:5000`
+Open **http://localhost:5000**
 
-### Windows
+## Download
 
-```bat
-run.bat
-```
+Grab the latest release from the [Releases](https://github.com/Laincetta/server-monitor/releases) page — no git required.
 
 ## API
 
-| Endpoint | Описание |
-|----------|----------|
-| `GET /api/metrics` | CPU, RAM, диск, сеть |
-| `GET /api/alerts` | Активные оповещения |
-| `GET /api/security` | Подключения, процессы, сессии |
-| `GET /api/processes` | Список процессов |
+| Endpoint | Description |
+|---|---|
+| `GET /api/metrics` | CPU, RAM, disk, network + 60s history |
+| `GET /api/alerts` | Performance alerts |
+| `GET /api/security` | Connections, sessions, suspicious processes |
+| `GET /api/processes` | Top 30 processes by CPU |
 
-## Структура
+## Stack
 
-```
-monitor/
-├── monitor.py          # Flask-приложение
-├── requirements.txt    # Зависимости
-├── run.sh              # Запуск на Linux
-├── run.bat             # Запуск на Windows
-└── templates/
-    └── dashboard.html  # Фронтенд
-```
+- [Flask](https://flask.palletsprojects.com/) — backend
+- [psutil](https://github.com/giampaolo/psutil) — system metrics
+- [Chart.js](https://www.chartjs.org/) — charts
+
+## License
+
+[MIT](LICENSE)
