@@ -26,21 +26,24 @@ logging.basicConfig(
 log = logging.getLogger("monitor")
 
 history = {
-    "time":    deque(maxlen=HISTORY_LEN),
-    "cpu":     deque(maxlen=HISTORY_LEN),
-    "ram":     deque(maxlen=HISTORY_LEN),
-    "disk":    deque(maxlen=HISTORY_LEN),
-    "net_in":  deque(maxlen=HISTORY_LEN),
-    "net_out": deque(maxlen=HISTORY_LEN),
+    "time":       deque(maxlen=HISTORY_LEN),
+    "cpu":        deque(maxlen=HISTORY_LEN),
+    "ram":        deque(maxlen=HISTORY_LEN),
+    "disk":       deque(maxlen=HISTORY_LEN),
+    "net_in":     deque(maxlen=HISTORY_LEN),
+    "net_out":    deque(maxlen=HISTORY_LEN),
+    "disk_read":  deque(maxlen=HISTORY_LEN),
+    "disk_write": deque(maxlen=HISTORY_LEN),
 }
 
 alerts        = deque(maxlen=50)
 sec_events    = deque(maxlen=50)
-prev_net      = psutil.net_io_counters()
-prev_net_time = time.time()
 lock          = threading.Lock()
 
-# кешируем между итерациями, чтобы не дёргать OS в каждом запросе
+prev_net         = psutil.net_io_counters()
+prev_disk        = psutil.disk_io_counters()
+prev_sample_time = time.time()
+
 _stats = {"connections": 0, "users": 0}
 
 
@@ -50,21 +53,30 @@ def _disk_usage():
 
 
 def collect_metrics():
-    global prev_net, prev_net_time
+    global prev_net, prev_disk, prev_sample_time
 
-    # interval=None — неблокирующий вызов, использует время с предыдущего вызова.
-    # background_loop спит 1с, поэтому окно измерения ≈1с, а не 2с как при interval=1.
+    # interval=None — неблокирующий, использует время с предыдущего вызова
     cpu  = psutil.cpu_percent(interval=None)
     ram  = psutil.virtual_memory().percent
     disk = _disk_usage().percent
 
     now_net  = psutil.net_io_counters()
+    now_disk = psutil.disk_io_counters()
     now_time = time.time()
-    dt = max(now_time - prev_net_time, 0.001)
+    dt = max(now_time - prev_sample_time, 0.001)
+
     net_in  = round((now_net.bytes_recv - prev_net.bytes_recv) / dt / 1024, 1)
     net_out = round((now_net.bytes_sent - prev_net.bytes_sent) / dt / 1024, 1)
-    prev_net      = now_net
-    prev_net_time = now_time
+
+    if now_disk and prev_disk:
+        disk_read  = round((now_disk.read_bytes  - prev_disk.read_bytes)  / dt / 1024, 1)
+        disk_write = round((now_disk.write_bytes - prev_disk.write_bytes) / dt / 1024, 1)
+    else:
+        disk_read = disk_write = 0.0
+
+    prev_net         = now_net
+    prev_disk        = now_disk
+    prev_sample_time = now_time
 
     ts = datetime.now().strftime("%H:%M:%S")
     with lock:
@@ -74,6 +86,8 @@ def collect_metrics():
         history["disk"].append(disk)
         history["net_in"].append(net_in)
         history["net_out"].append(net_out)
+        history["disk_read"].append(max(disk_read, 0))
+        history["disk_write"].append(max(disk_write, 0))
 
     if cpu >= THRESHOLDS["cpu"]:
         _add_alert("КРИТИЧНО", "CPU", f"Загрузка CPU: {cpu}%", "danger")
@@ -175,7 +189,6 @@ def _add_sec_event(source, msg, kind):
 def background_loop():
     global _prev_users
     _prev_users = {u.name for u in psutil.users()}
-    # прогрев: первый вызов cpu_percent всегда возвращает 0.0
     psutil.cpu_percent(interval=None)
     time.sleep(1)
     log.info("monitor ready at http://0.0.0.0:5000")
@@ -198,13 +211,17 @@ def index():
 
 @app.route("/api/metrics")
 def api_metrics():
-    # тяжёлые вызовы OS — вне лока
-    mem      = psutil.virtual_memory()
-    disk_obj = _disk_usage()
-    boot     = datetime.fromtimestamp(psutil.boot_time()).strftime("%d.%m.%Y %H:%M")
+    mem       = psutil.virtual_memory()
+    disk_obj  = _disk_usage()
+    boot      = datetime.fromtimestamp(psutil.boot_time()).strftime("%d.%m.%Y %H:%M")
     cpu_cores = psutil.cpu_count()
-    os_str   = f"{platform.system()} {platform.release()}"
-    hostname = platform.node()
+    os_str    = f"{platform.system()} {platform.release()}"
+    hostname  = platform.node()
+    try:
+        load = psutil.getloadavg()
+        load_avg = f"{load[0]:.2f} {load[1]:.2f} {load[2]:.2f}"
+    except AttributeError:
+        load_avg = None
 
     with lock:
         return jsonify({
@@ -221,14 +238,17 @@ def api_metrics():
             "uptime":      boot,
             "os":          os_str,
             "hostname":    hostname,
+            "load_avg":    load_avg,
             "connections": _stats["connections"],
             "users":       _stats["users"],
             "history": {
-                "time":    list(history["time"]),
-                "cpu":     list(history["cpu"]),
-                "ram":     list(history["ram"]),
-                "net_in":  list(history["net_in"]),
-                "net_out": list(history["net_out"]),
+                "time":       list(history["time"]),
+                "cpu":        list(history["cpu"]),
+                "ram":        list(history["ram"]),
+                "net_in":     list(history["net_in"]),
+                "net_out":    list(history["net_out"]),
+                "disk_read":  list(history["disk_read"]),
+                "disk_write": list(history["disk_write"]),
             },
         })
 
@@ -243,6 +263,34 @@ def api_alerts():
 def api_security():
     with lock:
         return jsonify(list(reversed(sec_events)))
+
+
+@app.route("/api/connections")
+def api_connections():
+    try:
+        conns = psutil.net_connections(kind="inet")
+        pid_cache = {}
+        result = []
+        for c in conns:
+            if not c.laddr:
+                continue
+            pid = c.pid
+            if pid and pid not in pid_cache:
+                try:
+                    pid_cache[pid] = psutil.Process(pid).name()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pid_cache[pid] = "-"
+            result.append({
+                "laddr":   f"{c.laddr.ip}:{c.laddr.port}",
+                "raddr":   f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "-",
+                "status":  c.status,
+                "process": pid_cache.get(pid, "-") if pid else "-",
+            })
+        result.sort(key=lambda x: (x["status"] != "ESTABLISHED", x["status"]))
+        return jsonify(result[:50])
+    except Exception as e:
+        log.error("connections error: %s", e)
+        return jsonify([])
 
 
 @app.route("/api/processes")
