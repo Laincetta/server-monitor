@@ -5,19 +5,17 @@
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-informational.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-Real-time server monitoring via web dashboard. Tracks CPU, RAM, disk, network, processes and security events.
+Веб-дашборд для мониторинга сервера в реальном времени. Отслеживает CPU, RAM, диск, сеть, процессы и события безопасности.
 
-![dashboard preview](https://raw.githubusercontent.com/Laincetta/server-monitor/main/docs/preview.png)
+## Возможности
 
-## Features
+- Живые метрики — CPU, RAM, диск, сеть обновляются каждую секунду
+- Графики истории за последние 60 секунд
+- Вкладка безопасности — новые подключения, входы пользователей, подозрительные процессы
+- Таблица процессов, отсортированная по загрузке CPU
+- Работает на Linux и Windows
 
-- Live metrics — CPU, RAM, disk, network updated every second
-- 60-second history charts
-- Security tab — new connections, logins, suspicious processes
-- Process table sorted by CPU usage
-- Works on Linux and Windows
-
-## Quick start
+## Быстрый старт
 
 ```sh
 git clone https://github.com/Laincetta/server-monitor.git
@@ -26,27 +24,27 @@ pip3 install -r requirements.txt
 python3 monitor.py
 ```
 
-Open **http://localhost:5000**
+Открыть **http://localhost:5000**
 
-## Download
+## Скачать
 
-Grab the latest release from the [Releases](https://github.com/Laincetta/server-monitor/releases) page — no git required.
+Готовый архив без git — на странице [Releases](https://github.com/Laincetta/server-monitor/releases).
 
 ## API
 
-| Endpoint | Description |
+| Endpoint | Описание |
 |---|---|
-| `GET /api/metrics` | CPU, RAM, disk, network + 60s history |
-| `GET /api/alerts` | Performance alerts |
-| `GET /api/security` | Connections, sessions, suspicious processes |
-| `GET /api/processes` | Top 30 processes by CPU |
+| `GET /api/metrics` | CPU, RAM, диск, сеть + история 60с |
+| `GET /api/alerts` | Оповещения о производительности |
+| `GET /api/security` | Подключения, сессии, подозрительные процессы |
+| `GET /api/processes` | Топ 30 процессов по CPU |
 
-## Stack
+## Стек
 
-- [Flask](https://flask.palletsprojects.com/) — backend
-- [psutil](https://github.com/giampaolo/psutil) — system metrics
-- [Chart.js](https://www.chartjs.org/) — charts
+- [Flask](https://flask.palletsprojects.com/) — бэкенд
+- [psutil](https://github.com/giampaolo/psutil) — системные метрики
+- [Chart.js](https://www.chartjs.org/) — графики
 
-## License
+## Лицензия
 
 [MIT](LICENSE)
