@@ -508,6 +508,8 @@ async function fetchMetrics() {
   const d = await (await fetch('/api/metrics')).json();
 
   $('hostname-badge').textContent = d.hostname;
+  $('conn-count').textContent  = d.connections;
+  $('users-count').textContent = d.users;
 
   const setBar = (valId, subId, barId, val, sub) => {
     $(valId).textContent = val;
@@ -579,18 +581,15 @@ function renderEvents(data, el, max=20) {
 
 async function fetchAlerts() {
   const data = await (await fetch('/api/alerts')).json();
-  const rev = [...data].reverse();
-  renderEvents(rev, $('alerts-mini'), 5);
-  renderEvents(rev, $('alerts-full'), 50);
+  renderEvents(data, $('alerts-mini'), 5);
+  renderEvents(data, $('alerts-full'), 50);
   $('alert-count').textContent = data.length ? data.length + ' всего' : 'нет';
 }
 
 async function fetchSecurity() {
   const data = await (await fetch('/api/security')).json();
-  renderEvents([...data].reverse(), $('sec-events-list'), 30);
-  $('sec-count').textContent  = data.length;
-  $('users-count').textContent = '1';
-  $('conn-count').textContent  = data.filter(e => e.source === 'СЕТЬ').length;
+  renderEvents(data, $('sec-events-list'), 30);
+  $('sec-count').textContent = data.length;
 }
 
 async function fetchProcesses() {

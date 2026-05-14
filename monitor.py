@@ -40,6 +40,9 @@ prev_net      = psutil.net_io_counters()
 prev_net_time = time.time()
 lock          = threading.Lock()
 
+# кешируем между итерациями, чтобы не дёргать OS в каждом запросе
+_stats = {"connections": 0, "users": 0}
+
 
 def _disk_usage():
     path = 'C:\\' if platform.system() == "Windows" else '/'
@@ -49,7 +52,9 @@ def _disk_usage():
 def collect_metrics():
     global prev_net, prev_net_time
 
-    cpu  = psutil.cpu_percent(interval=1)
+    # interval=None — неблокирующий вызов, использует время с предыдущего вызова.
+    # background_loop спит 1с, поэтому окно измерения ≈1с, а не 2с как при interval=1.
+    cpu  = psutil.cpu_percent(interval=None)
     ram  = psutil.virtual_memory().percent
     disk = _disk_usage().percent
 
@@ -98,7 +103,7 @@ _prev_users       = set()
 
 
 def check_security():
-    global _prev_connections, _prev_users
+    global _prev_connections, _prev_users, _stats
 
     try:
         conns = psutil.net_connections(kind="inet")
@@ -109,9 +114,11 @@ def check_security():
         }
         for laddr, raddr, _ in current - _prev_connections:
             _add_sec_event("СЕТЬ",
-                f"Новое подключение: {laddr.ip}:{laddr.port} → {raddr.ip}:{raddr.port}",
+                f"Новое подключение: {laddr.ip}:{laddr.port} -> {raddr.ip}:{raddr.port}",
                 "info")
         _prev_connections = current
+        with lock:
+            _stats["connections"] = len(current)
     except Exception:
         pass
 
@@ -123,6 +130,8 @@ def check_security():
             for u in _prev_users - current_users:
                 _add_sec_event("ПОЛЬЗОВАТЕЛЬ", f"Пользователь вышел: {u}", "info")
         _prev_users = current_users
+        with lock:
+            _stats["users"] = len(current_users)
     except Exception:
         pass
 
@@ -166,6 +175,7 @@ def _add_sec_event(source, msg, kind):
 def background_loop():
     global _prev_users
     _prev_users = {u.name for u in psutil.users()}
+    # прогрев: первый вызов cpu_percent всегда возвращает 0.0
     psutil.cpu_percent(interval=None)
     time.sleep(1)
     log.info("monitor ready at http://0.0.0.0:5000")
@@ -188,24 +198,31 @@ def index():
 
 @app.route("/api/metrics")
 def api_metrics():
+    # тяжёлые вызовы OS — вне лока
+    mem      = psutil.virtual_memory()
+    disk_obj = _disk_usage()
+    boot     = datetime.fromtimestamp(psutil.boot_time()).strftime("%d.%m.%Y %H:%M")
+    cpu_cores = psutil.cpu_count()
+    os_str   = f"{platform.system()} {platform.release()}"
+    hostname = platform.node()
+
     with lock:
-        mem      = psutil.virtual_memory()
-        disk_obj = _disk_usage()
-        boot     = datetime.fromtimestamp(psutil.boot_time()).strftime("%d.%m.%Y %H:%M")
         return jsonify({
-            "cpu":        round(history["cpu"][-1],  1) if history["cpu"]  else 0,
-            "ram":        round(history["ram"][-1],  1) if history["ram"]  else 0,
-            "disk":       round(history["disk"][-1], 1) if history["disk"] else 0,
-            "net_in":     round(history["net_in"][-1],  1) if history["net_in"]  else 0,
-            "net_out":    round(history["net_out"][-1], 1) if history["net_out"] else 0,
-            "ram_total":  round(mem.total / 1024**3, 1),
-            "ram_used":   round(mem.used  / 1024**3, 1),
-            "disk_total": round(disk_obj.total / 1024**3, 1),
-            "disk_used":  round(disk_obj.used  / 1024**3, 1),
-            "cpu_cores":  psutil.cpu_count(),
-            "uptime":     boot,
-            "os":         f"{platform.system()} {platform.release()}",
-            "hostname":   platform.node(),
+            "cpu":         round(history["cpu"][-1],  1) if history["cpu"]  else 0,
+            "ram":         round(history["ram"][-1],  1) if history["ram"]  else 0,
+            "disk":        round(history["disk"][-1], 1) if history["disk"] else 0,
+            "net_in":      round(history["net_in"][-1],  1) if history["net_in"]  else 0,
+            "net_out":     round(history["net_out"][-1], 1) if history["net_out"] else 0,
+            "ram_total":   round(mem.total / 1024**3, 1),
+            "ram_used":    round(mem.used  / 1024**3, 1),
+            "disk_total":  round(disk_obj.total / 1024**3, 1),
+            "disk_used":   round(disk_obj.used  / 1024**3, 1),
+            "cpu_cores":   cpu_cores,
+            "uptime":      boot,
+            "os":          os_str,
+            "hostname":    hostname,
+            "connections": _stats["connections"],
+            "users":       _stats["users"],
             "history": {
                 "time":    list(history["time"]),
                 "cpu":     list(history["cpu"]),
@@ -235,11 +252,11 @@ def api_processes():
         try:
             procs.append({
                 "pid":    p.info['pid'],
-                "name":   p.info['name'] or "—",
+                "name":   p.info['name'] or "-",
                 "cpu":    round(p.info['cpu_percent'] or 0, 1),
                 "mem":    round(p.info['memory_percent'] or 0, 1),
                 "status": p.info['status'],
-                "user":   p.info['username'] or "—",
+                "user":   p.info['username'] or "-",
             })
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
