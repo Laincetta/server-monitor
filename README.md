@@ -5,17 +5,9 @@
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-informational.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
-Веб-дашборд для мониторинга сервера в реальном времени. Отслеживает CPU, RAM, диск, сеть, процессы и события безопасности.
+Мониторинг сервера через браузер. CPU, RAM, диск, сеть и процессы в реальном времени.
 
-## Возможности
-
-- Живые метрики — CPU, RAM, диск, сеть обновляются каждую секунду
-- Графики истории за последние 60 секунд
-- Вкладка безопасности — новые подключения, входы пользователей, подозрительные процессы
-- Таблица процессов, отсортированная по загрузке CPU
-- Работает на Linux и Windows
-
-## Быстрый старт
+## Запуск
 
 ```sh
 git clone https://github.com/Laincetta/server-monitor.git
@@ -24,26 +16,31 @@ pip3 install -r requirements.txt
 python3 monitor.py
 ```
 
-Открыть **http://localhost:5000**
+Открыть http://localhost:5000
+
+## Что показывает
+
+- CPU, RAM, диск, сеть - обновляется раз в секунду
+- Графики нагрузки за последние 60 секунд
+- Процессы отсортированы по CPU
+- Новые подключения, сессии пользователей, подозрительные процессы
 
 ## Скачать
 
-Готовый архив без git — на странице [Releases](https://github.com/Laincetta/server-monitor/releases).
+Архив без git - на странице [Releases](https://github.com/Laincetta/server-monitor/releases).
 
 ## API
 
-| Endpoint | Описание |
+| Endpoint | Что возвращает |
 |---|---|
 | `GET /api/metrics` | CPU, RAM, диск, сеть + история 60с |
-| `GET /api/alerts` | Оповещения о производительности |
-| `GET /api/security` | Подключения, сессии, подозрительные процессы |
+| `GET /api/alerts` | Оповещения |
+| `GET /api/security` | Подключения и сессии |
 | `GET /api/processes` | Топ 30 процессов по CPU |
 
 ## Стек
 
-- [Flask](https://flask.palletsprojects.com/) — бэкенд
-- [psutil](https://github.com/giampaolo/psutil) — системные метрики
-- [Chart.js](https://www.chartjs.org/) — графики
+flask, psutil, chart.js
 
 ## Лицензия
 
