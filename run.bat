@@ -1,4 +1,11 @@
 @echo off
 cd /d "%~dp0"
-pip install -r requirements.txt -q 2>nul
-python monitor.py
+
+if not exist venv (
+    python -m venv venv
+    venv\Scripts\pip install -q -r requirements.txt
+)
+
+if not exist .env copy .env.example .env
+
+venv\Scripts\waitress-serve --listen=0.0.0.0:5000 --threads=4 monitor:app
