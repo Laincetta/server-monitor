@@ -7,6 +7,19 @@
 
 Мониторинг сервера через браузер. CPU, RAM, диск, сеть и процессы в реальном времени.
 
+## Интерфейс
+
+![Обзор](assets/screenshot-overview.png)
+
+<details>
+<summary>Ещё скрины</summary>
+
+![Аналитика](assets/screenshot-analytics.png)
+![Безопасность](assets/screenshot-security.png)
+![Процессы](assets/screenshot-processes.png)
+
+</details>
+
 ## Запуск
 
 ```sh
