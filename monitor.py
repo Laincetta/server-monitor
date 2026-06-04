@@ -16,12 +16,11 @@ try:
 except ImportError:
     pass
 
-# ── Configuration ──────────────────────────────────────────────────────────────
-HOST        = os.getenv("MONITOR_HOST", "0.0.0.0")
-PORT        = int(os.getenv("MONITOR_PORT", "5000"))
-LOG_DIR     = os.getenv("MONITOR_LOG_DIR",
-                        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"))
-LOG_FILE    = os.path.join(LOG_DIR, "monitor.log")
+HOST = os.getenv("MONITOR_HOST", "0.0.0.0")
+PORT = int(os.getenv("MONITOR_PORT", "5000"))
+LOG_DIR = os.getenv("MONITOR_LOG_DIR",
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"))
+LOG_FILE = os.path.join(LOG_DIR, "monitor.log")
 HISTORY_LEN = int(os.getenv("MONITOR_HISTORY", "60"))
 
 THRESHOLDS = {
@@ -32,7 +31,6 @@ THRESHOLDS = {
     "ram_warn": int(os.getenv("THRESHOLD_RAM_WARN",  "80")),
 }
 
-# ── Logging (10 MB per file, 5 backups) ────────────────────────────────────────
 os.makedirs(LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
@@ -45,7 +43,6 @@ logging.basicConfig(
 )
 log = logging.getLogger("monitor")
 
-# ── Shared in-memory state ─────────────────────────────────────────────────────
 history = {
     "time":       deque(maxlen=HISTORY_LEN),
     "cpu":        deque(maxlen=HISTORY_LEN),
@@ -57,19 +54,20 @@ history = {
     "disk_write": deque(maxlen=HISTORY_LEN),
 }
 
-alerts     = deque(maxlen=50)
+alerts = deque(maxlen=50)
 sec_events = deque(maxlen=50)
-lock       = threading.Lock()
+lock = threading.Lock()
 
-prev_net         = psutil.net_io_counters()
-prev_disk        = psutil.disk_io_counters()
+prev_net = psutil.net_io_counters()
+prev_disk = psutil.disk_io_counters()
 prev_sample_time = time.time()
 
 _stats = {"connections": 0, "users": 0}
+_prev_connections = set()
+_prev_users = set()
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
-def _disk_path() -> str:
+def _disk_path():
     return "C:\\" if platform.system() == "Windows" else "/"
 
 
@@ -77,30 +75,29 @@ def _disk_usage():
     return psutil.disk_usage(_disk_path())
 
 
-# ── Metrics collection ─────────────────────────────────────────────────────────
-def collect_metrics() -> None:
+def collect_metrics():
     global prev_net, prev_disk, prev_sample_time
 
-    cpu  = psutil.cpu_percent(interval=None)
-    ram  = psutil.virtual_memory().percent
+    cpu = psutil.cpu_percent(interval=None)
+    ram = psutil.virtual_memory().percent
     disk = _disk_usage().percent
 
-    now_net  = psutil.net_io_counters()
+    now_net = psutil.net_io_counters()
     now_disk = psutil.disk_io_counters()
     now_time = time.time()
     dt = max(now_time - prev_sample_time, 0.001)
 
-    net_in  = round((now_net.bytes_recv - prev_net.bytes_recv) / dt / 1024, 1)
+    net_in = round((now_net.bytes_recv - prev_net.bytes_recv) / dt / 1024, 1)
     net_out = round((now_net.bytes_sent - prev_net.bytes_sent) / dt / 1024, 1)
 
     if now_disk and prev_disk:
-        disk_read  = round((now_disk.read_bytes  - prev_disk.read_bytes)  / dt / 1024, 1)
+        disk_read = round((now_disk.read_bytes - prev_disk.read_bytes) / dt / 1024, 1)
         disk_write = round((now_disk.write_bytes - prev_disk.write_bytes) / dt / 1024, 1)
     else:
         disk_read = disk_write = 0.0
 
-    prev_net         = now_net
-    prev_disk        = now_disk
+    prev_net = now_net
+    prev_disk = now_disk
     prev_sample_time = now_time
 
     ts = datetime.now().strftime("%H:%M:%S")
@@ -128,7 +125,7 @@ def collect_metrics() -> None:
         _add_alert("КРИТИЧНО", "ДИСК", f"Заполнен на {disk}%", "danger")
 
 
-def _add_alert(level: str, source: str, msg: str, kind: str) -> None:
+def _add_alert(level, source, msg, kind):
     entry = {"time": datetime.now().strftime("%H:%M:%S"),
              "level": level, "source": source, "msg": msg, "kind": kind}
     with lock:
@@ -137,12 +134,7 @@ def _add_alert(level: str, source: str, msg: str, kind: str) -> None:
             log.warning("[%s] %s: %s", level, source, msg)
 
 
-# ── Security monitoring ────────────────────────────────────────────────────────
-_prev_connections: set = set()
-_prev_users:       set = set()
-
-
-def check_security() -> None:
+def check_security():
     global _prev_connections, _prev_users
 
     try:
@@ -203,7 +195,7 @@ def check_security() -> None:
         pass
 
 
-def _add_sec_event(source: str, msg: str, kind: str) -> None:
+def _add_sec_event(source, msg, kind):
     entry = {"time": datetime.now().strftime("%H:%M:%S"),
              "source": source, "msg": msg, "kind": kind}
     with lock:
@@ -212,23 +204,21 @@ def _add_sec_event(source: str, msg: str, kind: str) -> None:
             log.info("[SEC/%s] %s", source, msg)
 
 
-# ── Background collection thread ───────────────────────────────────────────────
-def background_loop() -> None:
+def background_loop():
     global _prev_users
     _prev_users = {u.name for u in psutil.users()}
-    psutil.cpu_percent(interval=None)   # warm-up: first call always returns 0
+    psutil.cpu_percent(interval=None)
     time.sleep(1)
-    log.info("Monitor ready — http://%s:%d", HOST, PORT)
+    log.info("http://%s:%d", HOST, PORT)
     while True:
         try:
             collect_metrics()
             check_security()
         except Exception as e:
-            log.error("Collection error: %s", e)
+            log.error("error: %s", e)
         time.sleep(1)
 
 
-# ── Flask application ──────────────────────────────────────────────────────────
 app = Flask(__name__)
 
 
@@ -239,17 +229,16 @@ def index():
 
 @app.route("/health")
 def health():
-    """Endpoint for load-balancers and container orchestrators."""
     return jsonify({"status": "ok"})
 
 
 @app.route("/api/metrics")
 def api_metrics():
-    mem      = psutil.virtual_memory()
+    mem = psutil.virtual_memory()
     disk_obj = _disk_usage()
-    boot     = datetime.fromtimestamp(psutil.boot_time()).strftime("%d.%m.%Y %H:%M")
+    boot = datetime.fromtimestamp(psutil.boot_time()).strftime("%d.%m.%Y %H:%M")
     try:
-        load     = psutil.getloadavg()
+        load = psutil.getloadavg()
         load_avg = f"{load[0]:.2f} {load[1]:.2f} {load[2]:.2f}"
     except AttributeError:
         load_avg = None
@@ -261,10 +250,10 @@ def api_metrics():
             "disk":        round(history["disk"][-1], 1) if history["disk"] else 0,
             "net_in":      round(history["net_in"][-1],  1) if history["net_in"]  else 0,
             "net_out":     round(history["net_out"][-1], 1) if history["net_out"] else 0,
-            "ram_total":   round(mem.total    / 1024 ** 3, 1),
-            "ram_used":    round(mem.used     / 1024 ** 3, 1),
+            "ram_total":   round(mem.total / 1024 ** 3, 1),
+            "ram_used":    round(mem.used / 1024 ** 3, 1),
             "disk_total":  round(disk_obj.total / 1024 ** 3, 1),
-            "disk_used":   round(disk_obj.used  / 1024 ** 3, 1),
+            "disk_used":   round(disk_obj.used / 1024 ** 3, 1),
             "disk_path":   _disk_path(),
             "cpu_cores":   psutil.cpu_count(),
             "uptime":      boot,
@@ -300,9 +289,9 @@ def api_security():
 @app.route("/api/connections")
 def api_connections():
     try:
-        conns     = psutil.net_connections(kind="inet")
+        conns = psutil.net_connections(kind="inet")
         pid_cache = {}
-        result    = []
+        result = []
         for c in conns:
             if not c.laddr:
                 continue
@@ -345,7 +334,6 @@ def api_processes():
     return jsonify(procs[:30])
 
 
-# ── Start background thread at import time (works with gunicorn / waitress) ────
 threading.Thread(target=background_loop, daemon=True).start()
 
 if __name__ == "__main__":
