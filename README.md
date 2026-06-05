@@ -1,6 +1,6 @@
 # server-monitor
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.10+-blue.svg)
 ![Flask](https://img.shields.io/badge/flask-3.0-lightgrey.svg)
 ![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20Windows-informational.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -22,38 +22,61 @@
 
 ## Запуск
 
-```sh
+**Linux / macOS**
+```bash
 git clone https://github.com/Laincetta/server-monitor.git
 cd server-monitor
-pip3 install -r requirements.txt
-python3 monitor.py
+./run.sh
 ```
 
-Открыть http://localhost:5000
+**Windows**
+```bat
+git clone https://github.com/Laincetta/server-monitor.git
+cd server-monitor
+run.bat
+```
+
+**Docker**
+```bash
+docker compose up -d
+```
+
+Открыть: http://localhost:5000
+
+Скрипты сами создадут виртуальное окружение и установят зависимости.
 
 ## Что показывает
 
-- CPU, RAM, диск, сеть - обновляется раз в секунду
+- CPU, RAM, диск, сеть — обновляется раз в секунду
 - Графики нагрузки за последние 60 секунд
-- Процессы отсортированы по CPU
+- Процессы отсортированы по CPU, с поиском по имени
 - Новые подключения, сессии пользователей, подозрительные процессы
 
-## Скачать
+## Конфигурация
 
-Архив без git - на странице [Releases](https://github.com/Laincetta/server-monitor/releases).
+Скопируй `.env.example` в `.env` и настрой под себя:
+
+```env
+MONITOR_PORT=5000
+THRESHOLD_CPU_CRIT=85
+THRESHOLD_RAM_CRIT=90
+THRESHOLD_DISK_CRIT=90
+```
 
 ## API
 
 | Endpoint | Что возвращает |
 |---|---|
 | `GET /api/metrics` | CPU, RAM, диск, сеть + история 60с |
-| `GET /api/alerts` | Оповещения |
-| `GET /api/security` | Подключения и сессии |
+| `GET /api/alerts` | Оповещения о превышении порогов |
+| `GET /api/security` | События безопасности |
+| `GET /api/connections` | Активные сетевые соединения |
 | `GET /api/processes` | Топ 30 процессов по CPU |
+| `GET /health` | Статус для балансировщика / Docker |
 
 ## Стек
 
-flask, psutil, chart.js
+Python · Flask · psutil · Chart.js · Waitress
 
 ## Лицензия
 
